@@ -59,3 +59,45 @@ curl -i http://localhost:3000/nope
 #### Concepts covered
 
 HTTP lifecycle, client-server architecture, status codes, JSON payloads, native Node routing.
+
+
+
+### Task 2: Fault-Tolerant Async Data Engine
+
+An asynchronous data engine in strict TypeScript that queries several public API endpoints at once with `Promise.allSettled()`. Failures are isolated and logged, so one broken endpoint never stops the others. Source code: [`level-1/task-2-async-data-engine`](level-1/task-2-async-data-engine)
+
+#### Highlights
+
+- Strict `tsconfig.json` (`noImplicitAny`, `strictNullChecks` and more)
+- Native `fetch` with a timeout
+- Raw responses are typed as `unknown` and mapped into `User`, `Post` and `Todo` interfaces with type guards, with no `any`
+- Two deliberately broken demo sources (HTTP 404 and an unreachable host) prove the error isolation
+
+#### Run
+
+```
+cd level-1/task-2-async-data-engine
+npm install
+npm start
+```
+
+![Engine output](level-1/task-2-async-data-engine/screenshots/run-output.png)
+
+#### Bonus: UV_THREADPOOL_SIZE benchmark
+
+```
+npm run bench
+```
+
+![Benchmark output](level-1/task-2-async-data-engine/screenshots/benchmark-output.png)
+
+| UV_THREADPOOL_SIZE | Avg processing (ms) | Avg total (ms) |
+|--------------------|---------------------|----------------|
+| 4 (default)        | 573                 | 677            |
+| 8                  | 396                 | 494            |
+
+About **1.45x faster processing** with 8 threads.
+
+#### Concepts covered
+
+V8 and libuv architecture, strict TypeScript, Promise.allSettled, domain interfaces, asynchronous error isolation.

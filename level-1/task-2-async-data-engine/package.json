@@ -1,0 +1,20 @@
+{
+  "name": "task-2-async-data-engine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fault-tolerant async data engine built with strict TypeScript and Promise.allSettled",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && cross-env UV_THREADPOOL_SIZE=8 node dist/index.js",
+    "start:default": "npm run build && node dist/index.js",
+    "bench": "npm run build && node dist/benchmark.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "cross-env": "^7.0.3",
+    "typescript": "^5.6.0"
+  }
+}
