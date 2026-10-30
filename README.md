@@ -4,19 +4,20 @@ Backend development tasks completed during the internship.
 
 ## Level 1
 
-# Task 1: Web Request Inspector & Raw HTTP Server
+### Task 1: Web Request Inspector & Raw HTTP Server
 
-A raw Node.js HTTP server built with only the built-in `http` module (no Express or other frameworks).
+A raw Node.js HTTP server built with only the built-in `http` module (no Express or other frameworks). Source code: [`level-1/task-1-raw-http-server`](level-1/task-1-raw-http-server)
 
-## Run
+#### Run
 
 ```
+cd level-1/task-1-raw-http-server
 node server.js
 ```
 
 The server starts on http://localhost:3000. Set a different port with the `PORT` environment variable.
 
-## Endpoints
+#### Endpoints
 
 | Method | Path          | Status        | Description                                   |
 |--------|---------------|---------------|-----------------------------------------------|
@@ -28,7 +29,7 @@ The server starts on http://localhost:3000. Set a different port with the `PORT`
 
 All responses use `Content-Type: application/json`.
 
-## Test with cURL
+#### Test with cURL
 
 ```
 curl -i http://localhost:3000/
@@ -37,22 +38,24 @@ curl -i http://localhost:3000/api/health
 curl -i http://localhost:3000/nope
 ```
 
-## Screenshots
+#### Screenshots (Browser DevTools, Network tab)
 
-Add your DevTools Network tab and Postman screenshots here.
-## Screenshots
+**GET / (200 OK)**
 
-### GET / (200 OK)
-![GET /](screenshots/root-200png.png)
+![GET /](level-1/task-1-raw-http-server/screenshots/root-200png.png)
 
-### GET /api/users (200 OK)
-![GET /api/users](screenshots/users-200png.png)
+**GET /api/users (200 OK)**
 
-### GET /api/health (200 OK, bonus)
-![GET /api/health](screenshots/health-200png.png)
+![GET /api/users](level-1/task-1-raw-http-server/screenshots/users-200png.png)
 
-### GET /nope (404 Not Found)
-![404 Not Found](screenshots/404notfound.png)
-## Concepts covered
+**GET /api/health (200 OK, bonus)**
+
+![GET /api/health](level-1/task-1-raw-http-server/screenshots/health-200png.png)
+
+**GET /nope (404 Not Found)**
+
+![404 Not Found](level-1/task-1-raw-http-server/screenshots/404notfound.png)
+
+#### Concepts covered
 
 HTTP lifecycle, client-server architecture, status codes, JSON payloads, native Node routing.
