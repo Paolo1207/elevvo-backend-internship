@@ -101,3 +101,49 @@ About **1.45x faster processing** with 8 threads.
 #### Concepts covered
 
 V8 and libuv architecture, strict TypeScript, Promise.allSettled, domain interfaces, asynchronous error isolation.
+
+
+## Level 2
+
+### Task 3: Observability & Modular Express API Architecture
+
+A structured Express.js + TypeScript API split into Routes, Controllers and Services, with CRUD for `/api/users`, a global observability middleware and an API key security middleware. Source code: [`level-2/task-3-express-api`](level-2/task-3-express-api)
+
+#### Highlights
+
+- Controller-Service pattern: routes only map URLs, controllers handle HTTP, services hold the logic
+- Observability middleware logs the ISO timestamp, method, path, status and duration in ms for every request
+- Input validation with proper status codes (400, 404, 409) and JSON error payloads
+- Bonus: `requireAPIKey` middleware rejects requests without a valid `x-api-key` header with `401 Unauthorized`
+
+#### Run
+
+```
+cd level-2/task-3-express-api
+npm install
+npm start
+```
+
+Send the header `x-api-key: secret-key-123` with every `/api` request.
+
+#### Screenshots
+
+**Observability logs**
+
+![Observability logs](level-2/task-3-express-api/screenshots/observability-logs.png)
+
+**401 Unauthorized without an API key (bonus)**
+
+![401 Unauthorized](level-2/task-3-express-api/screenshots/unauthorized-401.png)
+
+**GET /api/users (200 OK)**
+
+![List users](level-2/task-3-express-api/screenshots/list-200.png)
+
+**POST /api/users (201 Created)**
+
+![Create user](level-2/task-3-express-api/screenshots/create-201.png)
+
+#### Concepts covered
+
+Express framework, modular routing, custom middleware pipelines, controller-service pattern, observability logging.
