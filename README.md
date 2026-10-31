@@ -147,3 +147,50 @@ Send the header `x-api-key: secret-key-123` with every `/api` request.
 #### Concepts covered
 
 Express framework, modular routing, custom middleware pipelines, controller-service pattern, observability logging.
+
+
+### Task 4: Stateless JWT Authentication & Threat Mitigation
+
+A secure authentication pipeline in Express.js + TypeScript: bcrypt password hashing, JWT login, `authenticateToken` and `authorizeRole` middleware (USER vs ADMIN), Helmet security headers, strict CORS and login rate limiting. Source code: [`level-2/task-4-jwt-auth`](level-2/task-4-jwt-auth)
+
+#### Highlights
+
+- Passwords hashed with bcrypt (salted, cost 12) and never returned to clients
+- `/api/auth/login` issues a signed, 1-hour JWT with `sub`, `username` and `role` claims
+- `authenticateToken` returns `401` for missing, invalid or expired tokens; `authorizeRole` returns `403` for the wrong role
+- Forged tokens (tampered signature, `alg: none`) are rejected because the algorithm is pinned
+- Bonus: strict CORS allow-list and a limit of 5 login requests per 15 minutes (`429`)
+
+#### Run
+
+```
+cd level-2/task-4-jwt-auth
+npm install
+npm start
+```
+
+#### Screenshots
+
+**Login (200 OK, JWT issued)**
+
+![Login](level-2/task-4-jwt-auth/screenshots/login-200.png)
+
+**Admin route as ADMIN (200 OK)**
+
+![Admin access](level-2/task-4-jwt-auth/screenshots/admin-200.png)
+
+**No token (401 Unauthorized)**
+
+![No token](level-2/task-4-jwt-auth/screenshots/no-token-401.png)
+
+**Admin route as USER (403 Forbidden)**
+
+![Forbidden](level-2/task-4-jwt-auth/screenshots/forbidden-403.png)
+
+**Login rate limit (429 Too Many Requests)**
+
+![Rate limit](level-2/task-4-jwt-auth/screenshots/rate-limit-429.png)
+
+#### Concepts covered
+
+Authentication vs. authorization, JWT architecture, password hashing, role-based access control, security headers and rate limiting.
