@@ -194,3 +194,52 @@ npm start
 #### Concepts covered
 
 Authentication vs. authorization, JWT architecture, password hashing, role-based access control, security headers and rate limiting.
+
+
+### Task 5: Relational Persistence with PostgreSQL & Prisma ORM
+
+An e-commerce API with a PostgreSQL database modelled in Prisma ORM: User, Order, Product and OrderItem with one-to-many and many-to-many relationships, SQL migrations, pagination, relational filtering, nested writes and an atomic checkout. Source code: [`level-2/task-5-prisma-shop`](level-2/task-5-prisma-shop)
+
+#### Highlights
+
+- Many-to-many between Order and Product through an explicit `OrderItem` join model that snapshots the unit price
+- Migrations generated and applied with `prisma migrate dev`
+- Pagination (`skip`/`take` with a `meta` object), `where` filters and relational filters (`some`)
+- Nested write: order and order items created in one query
+- Bonus: checkout wrapped in `prisma.$transaction`, with an atomic stock check and automatic rollback on failure
+
+#### Run
+
+See the [task README](level-2/task-5-prisma-shop/README.md) for the PostgreSQL setup.
+
+```
+cd level-2/task-5-prisma-shop
+npm install
+npx prisma migrate dev --name init
+npx prisma db seed
+npm start
+```
+
+#### Screenshots
+
+**Database tables created by the migration**
+
+![Tables in pgAdmin](level-2/task-5-prisma-shop/screenshots/pgadmin-tables.png)
+
+**Pagination**
+
+![Pagination](level-2/task-5-prisma-shop/screenshots/pagination-200.png)
+
+**Successful checkout (nested write inside a transaction)**
+
+![Checkout 201](level-2/task-5-prisma-shop/screenshots/checkout-201.png)
+
+**Failed checkout rolls back the stock deduction**
+
+![Rollback 409](level-2/task-5-prisma-shop/screenshots/rollback-409.png)
+
+![Stock unchanged](level-2/task-5-prisma-shop/screenshots/rollback-stock.png)
+
+#### Concepts covered
+
+Relational schema design, SQL migrations, Prisma query builder, pagination and filtering, relational integrity (ACID).
