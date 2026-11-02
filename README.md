@@ -275,6 +275,7 @@ The Task 5 shop API with **Redis** as a cache-aside layer for product reads (1-h
 **Invalidation: after `PUT /api/products/1` the keys are purged and the next read returns the new price**
 
 ![Keys purged](level-3/task-6-redis-cache/screenshots/invalidation-keys.png)
+![Cache miss after update](level-3/task-6-redis-cache/screenshots/invalidation-miss.png)
 ![Fresh data](level-3/task-6-redis-cache/screenshots/invalidation-fresh.png)
 
 **Benchmark: 14.81 ms (PostgreSQL) vs 1.9 ms (Redis), 7.8x faster**

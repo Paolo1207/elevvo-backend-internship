@@ -120,6 +120,7 @@ Cached keys exist in Redis and expire after about an hour (3595 s remaining here
 After `PUT /api/products/1` with `{"price":"26.50"}`, the product key and all list keys are gone. The next read is a MISS and returns the new price instead of the stale one.
 
 ![Keys purged](screenshots/invalidation-keys.png)
+![Cache miss after update](screenshots/invalidation-miss.png)
 ![Fresh data](screenshots/invalidation-fresh.png)
 
 ### Benchmark
