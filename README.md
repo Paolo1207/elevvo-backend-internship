@@ -243,3 +243,47 @@ npm start
 #### Concepts covered
 
 Relational schema design, SQL migrations, Prisma query builder, pagination and filtering, relational integrity (ACID).
+
+## Level 3
+
+### Task 6: High-Performance Caching & Distributed Rate Limiting with Redis
+
+Folder: [`level-3/task-6-redis-cache`](level-3/task-6-redis-cache)
+
+The Task 5 shop API with **Redis** as a cache-aside layer for product reads (1-hour TTL) and as the shared store for a distributed rate limiter. **Bonus:** active cache invalidation when a product is updated or deleted.
+
+**Run it:** `docker compose up -d`, then `npm install`, `npx prisma generate`, `npm start`.
+
+| Feature | How |
+|---|---|
+| Cache-aside | Redis first, PostgreSQL only on a miss, stored with `EX 3600`. `X-Cache: HIT / MISS` header. |
+| Cache keys | `products:item:<id>` and `products:list:<normalized query>` |
+| Invalidation (bonus) | `PUT` / `DELETE` purge the product key and all list keys; `POST` and successful checkout purge too (`SCAN` + `UNLINK`) |
+| Distributed rate limit | `express-rate-limit` + `rate-limit-redis`: counters stored in Redis (`rl:api:<ip>`), shared by every instance |
+| Fail-open | If Redis is down, the API still works from PostgreSQL |
+
+**Cache MISS, then HIT**
+
+![Cache miss](level-3/task-6-redis-cache/screenshots/cache-miss.png)
+![Cache hit](level-3/task-6-redis-cache/screenshots/cache-hit.png)
+
+**Redis container and cached keys (TTL about 1 hour)**
+
+![docker ps](level-3/task-6-redis-cache/screenshots/docker-ps.png)
+![Redis keys](level-3/task-6-redis-cache/screenshots/redis-keys.png)
+
+**Invalidation: after `PUT /api/products/1` the keys are purged and the next read returns the new price**
+
+![Keys purged](level-3/task-6-redis-cache/screenshots/invalidation-keys.png)
+![Fresh data](level-3/task-6-redis-cache/screenshots/invalidation-fresh.png)
+
+**Benchmark: 14.81 ms (PostgreSQL) vs 1.9 ms (Redis), 7.8x faster**
+
+![Benchmark](level-3/task-6-redis-cache/screenshots/benchmark.png)
+
+**Distributed rate limit: two instances, one shared counter, the 6th request gets 429**
+
+![Rate limit 429](level-3/task-6-redis-cache/screenshots/rate-limit-429.png)
+![Rate limit key](level-3/task-6-redis-cache/screenshots/rate-limit-key.png)
+
+See the [task README](level-3/task-6-redis-cache/README.md) for the full explanation and known limitations.

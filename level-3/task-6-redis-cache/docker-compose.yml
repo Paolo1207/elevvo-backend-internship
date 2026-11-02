@@ -1,0 +1,16 @@
+# Local Redis for the cache and the distributed rate limiter.
+#   Start:  docker compose up -d
+#   Stop:   docker compose down
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: shop-redis
+    ports:
+      - "6379:6379"
+    # Bound the memory used by the cache; the least recently used keys are evicted first.
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
