@@ -22,5 +22,5 @@
     "skipLibCheck": true,
     "sourceMap": true
   },
-  "include": ["src"]
+  "include": ["src", "scripts/benchmark.ts"]
 }
