@@ -1,0 +1,84 @@
+# The whole stack: PostgreSQL + Redis + one-off database migration + the Express API.
+#   Start:   docker compose up -d --build
+#   Status:  docker compose ps
+#   Stop:    docker compose down          (add -v to also delete the database volume)
+#
+# Start-up order is enforced with health checks:
+#   postgres (healthy) + redis (healthy)  ->  migrate (runs once, exits 0)  ->  api
+name: shop-stack
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shop-stack-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shopuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shop12345}
+      POSTGRES_DB: ${POSTGRES_DB:-shop}
+    ports:
+      # Host port 5433 (not 5432) so it does not clash with a PostgreSQL installed on your computer.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # $$ stops Compose from substituting the variable; the container's shell reads it instead.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: shop-stack-redis
+    ports:
+      # Host port 6380 so it does not clash with the Redis container from Task 6.
+      - "6380:6379"
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # One-off job: applies the Prisma migrations, then exits. The API waits for it to finish successfully.
+  migrate:
+    build:
+      context: .
+      target: builder # the builder stage still has the Prisma CLI
+    container_name: shop-stack-migrate
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-shopuser}:${POSTGRES_PASSWORD:-shop12345}@postgres:5432/${POSTGRES_DB:-shop}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      target: runner # the small final image
+    image: shop-api:1.0.0
+    container_name: shop-stack-api
+    ports:
+      - "${API_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # Inside the Compose network the containers reach each other by service name.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-shopuser}:${POSTGRES_PASSWORD:-shop12345}@postgres:5432/${POSTGRES_DB:-shop}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  pgdata:

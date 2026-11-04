@@ -1,0 +1,43 @@
+{
+  "name": "task-7-docker-cicd",
+  "version": "1.0.0",
+  "description": "Dockerized shop API (Express, Prisma, PostgreSQL, Redis) with Jest tests and a GitHub Actions CI pipeline",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && node dist/server.js",
+    "start:prod": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio",
+    "bench": "tsx src/scripts/benchmark.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:ci": "jest --ci --coverage",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json"
+  },
+  "private": true,
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "dotenv": "^18.0.9",
+    "express": "^4.22.3",
+    "express-rate-limit": "^8.7.2",
+    "rate-limit-redis": "^6.0.2",
+    "redis": "^6.3.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.25",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.20.5",
+    "@types/supertest": "^7.2.1",
+    "jest": "^30.5.2",
+    "prisma": "^7.10.1",
+    "supertest": "^7.3.1",
+    "ts-jest": "^29.4.15",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}

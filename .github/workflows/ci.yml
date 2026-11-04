@@ -1,0 +1,74 @@
+name: CI
+
+# Runs on every pull request that targets main (and can also be started by hand from the Actions tab).
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to the same PR cancels the older, still-running check.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  APP_DIR: level-3/task-7-docker-cicd
+
+jobs:
+  test-and-build:
+    name: Test and Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+    env:
+      # `prisma generate` needs this to be set, but never connects to a database.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ env.APP_DIR }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate the Prisma client
+        run: npx prisma generate
+
+      - name: Type-check (source and tests)
+        run: npm run typecheck
+
+      - name: Run unit and integration tests (with coverage gate)
+        run: npm run test:ci
+
+      - name: Build the TypeScript project
+        run: npm run build
+
+  docker-build:
+    name: Docker image builds
+    needs: test-and-build # only runs if the tests passed
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: docker compose -f ${{ env.APP_DIR }}/docker-compose.yml config --quiet
+
+      - name: Build the multi-stage image (runner stage)
+        run: docker build --target runner -t shop-api:ci ${{ env.APP_DIR }}
+
+      - name: Show the image size
+        run: docker images shop-api:ci

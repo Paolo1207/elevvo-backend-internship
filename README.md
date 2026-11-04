@@ -288,3 +288,41 @@ The Task 5 shop API with **Redis** as a cache-aside layer for product reads (1-h
 ![Rate limit key](level-3/task-6-redis-cache/screenshots/rate-limit-key.png)
 
 See the [task README](level-3/task-6-redis-cache/README.md) for the full explanation and known limitations.
+
+### Task 7: Multi-Stage Dockerization & Automated CI/CD Pipelines
+
+Folder: [`level-3/task-7-docker-cicd`](level-3/task-7-docker-cicd) · Pipeline: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+
+The Task 6 API packaged as a small multi-stage Docker image, covered by Jest and Supertest tests, run as a full Docker Compose stack, and checked by a GitHub Actions pipeline on every pull request to `main`. **Bonus:** multi-stage builds, pipeline quality gates, and Compose with health-check dependencies.
+
+| Feature | How |
+|---|---|
+| Multi-stage Dockerfile | `builder` compiles TypeScript; `runner` (`node:22-alpine`) gets production dependencies and `dist/` only, runs as non-root, has a health check |
+| Tests | 121 Jest tests (unit and Supertest integration), no database or Redis needed, about 98% coverage |
+| Quality gate | `npm run test:ci` fails below 80% statements / 70% branches / 80% functions / 80% lines |
+| CI pipeline | On pull requests to `main`: `npm ci`, Prisma generate, type-check, tests, build, then a Docker image build |
+| Merge blocking | Branch protection requires the CI checks to pass before merging |
+| Docker Compose | `postgres` + `redis` (health-checked) -> one-off `migrate` -> `api` |
+
+**Image size: 373 MB final image vs 1.09 GB for the builder stage**
+
+![Image sizes](level-3/task-7-docker-cicd/screenshots/docker-images.png)
+
+**Tests and coverage**
+
+![Tests passing](level-3/task-7-docker-cicd/screenshots/tests-passing.png)
+![Coverage](level-3/task-7-docker-cicd/screenshots/coverage.png)
+
+**Docker Compose stack: all services healthy**
+
+![compose ps](level-3/task-7-docker-cicd/screenshots/compose-ps.png)
+![Health check](level-3/task-7-docker-cicd/screenshots/compose-api.png)
+![Cache HIT from the container](level-3/task-7-docker-cicd/screenshots/compose-cache.png)
+
+**CI pipeline: passing, merge protection, and a failing run that blocks the merge**
+
+![CI passing](level-3/task-7-docker-cicd/screenshots/ci-pass.png)
+![Branch protection](level-3/task-7-docker-cicd/screenshots/branch-protection.png)
+![CI failing](level-3/task-7-docker-cicd/screenshots/ci-fail.png)
+
+See the [task README](level-3/task-7-docker-cicd/README.md) for the full explanation and known limitations.
