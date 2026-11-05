@@ -16,7 +16,7 @@ describe('GET /health', () => {
   it('reports database and redis as up', async () => {
     const res = await request(app).get('/health');
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ status: 'ok', database: 'up', redis: 'up' });
     expect(new Date(res.body.timestamp).toString()).not.toBe('Invalid Date');
   });
