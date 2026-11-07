@@ -1,0 +1,133 @@
+# The whole event-driven system:
+#
+#   client -> nginx (load balancer) -> api x2 -> Redis Streams -> worker-inventory x2
+#                                                              -> worker-email x1
+#                                       api / workers -> PostgreSQL
+#
+#   Start:    docker compose up -d --build
+#   Status:   docker compose ps
+#   Scale:    docker compose up -d --scale api=4 --scale worker-inventory=4
+#   Logs:     docker compose logs -f worker-email
+#   Stop:     docker compose down          (add -v to also delete the data volumes)
+name: eda-stack
+
+# Settings shared by the API and both workers: they are the SAME image started with different commands.
+x-app: &app
+  build:
+    context: .
+    target: runner
+  image: order-events-app:1.0.0
+  restart: unless-stopped
+  environment: &app-env
+    NODE_ENV: production
+    PORT: "3000"
+    DATABASE_URL: postgresql://${POSTGRES_USER:-shopuser}:${POSTGRES_PASSWORD:-shop12345}@postgres:5432/${POSTGRES_DB:-shop}
+    REDIS_URL: redis://redis:6379
+    # Fault-tolerance settings (see README): 5 attempts, backoff 1s, 2s, 4s, 8s (max 30s), then the DLQ.
+    WORKER_MAX_ATTEMPTS: "5"
+    RETRY_BASE_DELAY_MS: "1000"
+    RETRY_MAX_DELAY_MS: "30000"
+    VISIBILITY_TIMEOUT_MS: "60000"
+    RATE_LIMIT_MAX: "1000"
+  depends_on: &app-depends
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shopuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shop12345}
+      POSTGRES_DB: ${POSTGRES_DB:-shop}
+    ports:
+      - "5434:5432" # host port 5434 so it does not clash with the databases of earlier tasks
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  # The message broker. Two settings make it safe to use as a queue:
+  #   --appendonly yes          : writes every command to disk, so queued events survive a Redis restart
+  #   --maxmemory-policy noeviction : never silently delete keys (events!) to free memory
+  # (In production you would use a separate Redis for the cache and for the broker.)
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "6381:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # One-off job: applies the Prisma migrations, then exits.
+  migrate:
+    build:
+      context: .
+      target: builder
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-shopuser}:${POSTGRES_PASSWORD:-shop12345}@postgres:5432/${POSTGRES_DB:-shop}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # PRODUCER: accepts orders and publishes events. Two replicas; NGINX spreads the traffic over them.
+  # No container_name and no published port: several replicas cannot share either.
+  api:
+    <<: *app
+    command: ["node", "dist/server.js"]
+    deploy:
+      replicas: 2
+
+  # CONSUMER 1: reserves stock. Two replicas SHARE the work of the "inventory" consumer group.
+  worker-inventory:
+    <<: *app
+    command: ["node", "dist/workers/inventoryWorker.js"]
+    # Workers have no HTTP server, so the image's HEALTHCHECK (which calls /health) must be switched off.
+    healthcheck:
+      disable: true
+    stop_grace_period: 15s
+    deploy:
+      replicas: 2
+
+  # CONSUMER 2: sends confirmation emails. A different consumer group, so it receives EVERY event too.
+  worker-email:
+    <<: *app
+    command: ["node", "dist/workers/emailWorker.js"]
+    healthcheck:
+      disable: true
+    stop_grace_period: 15s
+    deploy:
+      replicas: 1
+
+  # LOAD BALANCER: the only thing published to your computer (http://localhost:8080).
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
