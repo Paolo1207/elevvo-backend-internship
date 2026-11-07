@@ -326,3 +326,35 @@ The Task 6 API packaged as a small multi-stage Docker image, covered by Jest and
 ![CI failing](level-3/task-7-docker-cicd/screenshots/ci-fail.png)
 
 See the [task README](level-3/task-7-docker-cicd/README.md) for the full explanation and known limitations.
+
+### Task 8: Event-Driven Order Processing
+
+`POST /api/orders` saves the order as `PENDING`, publishes an `OrderCreated` event to Redis Streams and answers `202 Accepted`. Separate workers (inventory, email) consume it asynchronously. Failures are retried with exponential backoff; events that cannot be processed go to a Dead Letter Queue and can be replayed. Everything runs behind an NGINX load balancer with several API and worker replicas.
+
+Folder: [`industry-level/task-8-event-driven-orders`](industry-level/task-8-event-driven-orders) (full write-up in its README).
+
+**Architecture**
+
+![Architecture](industry-level/task-8-event-driven-orders/docs/architecture.png)
+
+**Retry, backoff and DLQ flow**
+
+![Retry flow](industry-level/task-8-event-driven-orders/docs/retry-flow.png)
+
+**Results**
+
+| 202 Accepted | Order confirmed | Email worker log |
+|---|---|---|
+| ![](industry-level/task-8-event-driven-orders/screenshots/02-202-accepted.png) | ![](industry-level/task-8-event-driven-orders/screenshots/03-order-confirmed.png) | ![](industry-level/task-8-event-driven-orders/screenshots/04-email-log.png) |
+
+| Retry with backoff | Dead letter | Replay |
+|---|---|---|
+| ![](industry-level/task-8-event-driven-orders/screenshots/06-retry-backoff.png) | ![](industry-level/task-8-event-driven-orders/screenshots/07-dead-letter.png) | ![](industry-level/task-8-event-driven-orders/screenshots/08-replay.png) |
+
+| Poison message | Load balancing | Scaled stack |
+|---|---|---|
+| ![](industry-level/task-8-event-driven-orders/screenshots/09-poison-dlq.png) | ![](industry-level/task-8-event-driven-orders/screenshots/10b-lb-4-replicas.png) | ![](industry-level/task-8-event-driven-orders/screenshots/10-scaled.png) |
+
+| Workers share the load | Queue stats | Tests (187 passing) |
+|---|---|---|
+| ![](industry-level/task-8-event-driven-orders/screenshots/10c-workers-share-load.png) | ![](industry-level/task-8-event-driven-orders/screenshots/11-queue-stats.png) | ![](industry-level/task-8-event-driven-orders/screenshots/12-tests-passing.png) |
