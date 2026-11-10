@@ -358,3 +358,31 @@ Folder: [`industry-level/task-8-event-driven-orders`](industry-level/task-8-even
 | Workers share the load | Queue stats | Tests (187 passing) |
 |---|---|---|
 | ![](industry-level/task-8-event-driven-orders/screenshots/10c-workers-share-load.png) | ![](industry-level/task-8-event-driven-orders/screenshots/11-queue-stats.png) | ![](industry-level/task-8-event-driven-orders/screenshots/12-tests-passing.png) |
+
+## Industry Level
+
+### Task 9: AI-Powered Semantic Search & Vector Embedding Pipeline
+
+Folder: [`industry-level/task-9-semantic-search`](industry-level/task-9-semantic-search)
+
+Natural-language product search: product text is embedded (multilingual-e5-small, 384 dimensions, also OpenAI-compatible),
+stored in PostgreSQL with **pgvector**, and ranked by **cosine similarity** at `GET /api/products/search`. Frequent queries are
+cached in **Redis** (result cache + embedding cache, longer TTL for hot queries, single-flight, invalidation on product/stock change),
+so warm searches answer in a few milliseconds (target < 100 ms). Bonus: Arabic and English queries (normalization, language detection, cross-lingual matching).
+
+```
+product text -> embedding model -> vector(384) -> pgvector
+query -> normalize -> Redis result cache -> (miss) Redis embedding cache -> (miss) model -> pgvector <=> -> Redis (TTL)
+```
+
+| Screenshot | What it shows |
+|---|---|
+| ![Health](industry-level/task-9-semantic-search/screenshots/01-health.png) | `/health` with `embeddings: ready` |
+| ![Index](industry-level/task-9-semantic-search/screenshots/02-index.png) | `npm run index:products` |
+| ![English](industry-level/task-9-semantic-search/screenshots/03-search-english.png) | "warm lightweight jacket for winter hiking", `X-Cache: MISS` |
+| ![Hit](industry-level/task-9-semantic-search/screenshots/04-search-cache-hit.png) | Same query, `X-Cache: HIT` |
+| ![Arabic](industry-level/task-9-semantic-search/screenshots/05-search-arabic.png) | Arabic query, `language: ar` |
+| ![Bench](industry-level/task-9-semantic-search/screenshots/06-benchmark.png) | `npm run bench:search`, warm p95 < 100 ms |
+| ![Tests](industry-level/task-9-semantic-search/screenshots/07-tests.png) | `npm test` |
+
+More detail: [task README](industry-level/task-9-semantic-search/README.md).
