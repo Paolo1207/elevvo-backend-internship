@@ -22,7 +22,7 @@ export const config = {
   nodeEnv,
   isProduction,
   // Commit this build was made from (Render sets RENDER_GIT_COMMIT, CI can set GIT_SHA). Shown by /health.
-  version: process.env['GIT_SHA'] ?? process.env['RENDER_GIT_COMMIT'] ?? 'dev',
+  version: process.env['GIT_SHA'] || process.env['RENDER_GIT_COMMIT'] || 'dev',
   port: readPositiveInt('PORT', 3000),
   // Number of reverse proxies in front of the API (Render = 1). Needed so rate limiting sees the real client IP.
   trustProxy: readPositiveInt('TRUST_PROXY', 1),
