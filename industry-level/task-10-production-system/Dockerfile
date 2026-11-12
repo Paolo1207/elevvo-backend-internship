@@ -35,7 +35,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 
 # The commit this image was built from (CI passes it). /health shows it, so a deployment can be verified.
-ARG GIT_SHA=dev
+ARG GIT_SHA=
 ENV GIT_SHA=$GIT_SHA
 
 # The downloaded model (about 120 MB) is stored here. docker-compose mounts a volume on it, so it is downloaded only once.
