@@ -1,0 +1,19 @@
+flowchart LR
+  client([Browser / Thunder Client]) -->|HTTPS| render
+  subgraph render [Render web service - Docker, zero-downtime deploy]
+    direction TB
+    sec[Helmet + CORS allow-list<br/>Redis rate limiter] --> auth[JWT auth + RBAC<br/>ADMIN / CUSTOMER]
+    auth --> catalog[Catalog routes<br/>cache-aside]
+    auth --> cart[Cart + checkout<br/>prisma.$transaction]
+    auth --> search[Semantic search<br/>embeddings + cosine]
+    auth --> deep[/health/deep<br/>admin only/]
+  end
+  catalog <-->|cache, TTL, rate limits| redis[(Upstash Redis)]
+  search <-->|query + result cache| redis
+  sec <--> redis
+  cart -->|ACID| pg[(Neon PostgreSQL<br/>+ pgvector)]
+  catalog --> pg
+  search -->|"embedding <=> query"| pg
+  search -->|text to vector| openai[OpenAI embeddings API]
+  deep -.->|pool counts, latency| pg
+  deep -.->|PING latency| redis

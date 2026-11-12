@@ -1,0 +1,187 @@
+name: Task 10 CI/CD
+
+# Pull request  -> test + build the image (nothing is deployed)
+# Push to main  -> test + build, then STAGING (migrate, deploy, smoke test) -> approval -> PRODUCTION
+on:
+  pull_request:
+    branches: [main]
+    paths: ['industry-level/task-10-production-system/**', '.github/workflows/task-10-*.yml']
+  push:
+    branches: [main]
+    paths: ['industry-level/task-10-production-system/**', '.github/workflows/task-10-*.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: task-10-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }} # never cancel a running deployment
+
+permissions:
+  contents: read
+
+env:
+  APP_DIR: industry-level/task-10-production-system
+  # Stops onnxruntime from downloading GPU binaries during npm install.
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
+jobs:
+  # ------------------------------------------------------------------------------------------------
+  # 1. Quality gate: secret scan, type-check, Jest + Supertest suites, real-database migration check
+  # ------------------------------------------------------------------------------------------------
+  test:
+    name: Test (Jest + Supertest) and migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+    services:
+      # Disposable PostgreSQL WITH pgvector and Redis, only for this run. No real data, no real secrets.
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make sure no .env file is committed
+        working-directory: .
+        run: |
+          if git ls-files | grep -E '(^|/)\.env($|\.[a-z]+$)' | grep -v '\.env\.example$'; then
+            echo "A .env file is committed. Remove it and rotate any secret it contained."; exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ env.APP_DIR }}/package-lock.json
+
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Type-check (source and tests)
+        run: npm run typecheck
+      - name: Jest + Supertest suites (with coverage gate)
+        run: npm run test:ci
+
+      - name: Apply the migrations to a real PostgreSQL (proves they run from an empty database)
+        run: npx prisma migrate deploy
+      - name: Compile TypeScript
+        run: npm run build
+
+  # ------------------------------------------------------------------------------------------------
+  # 2. Build the production Docker image and run the real end-to-end smoke test against the CONTAINER
+  # ------------------------------------------------------------------------------------------------
+  docker:
+    name: Build production image and smoke-test it
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the multi-stage image (runner stage)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.APP_DIR }}
+          target: runner
+          load: true
+          tags: capstone-api:ci
+          build-args: GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ env.APP_DIR }}/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+      - name: Migrate the CI database and create a CI admin
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          ADMIN_EMAIL: ci-admin@example.com
+          ADMIN_PASSWORD: ci-admin-password-1
+          BCRYPT_ROUNDS: '4'
+        run: |
+          npx prisma migrate deploy
+          npm run seed:admin
+          npx tsx src/scripts/seedCatalog.ts
+
+      - name: Start the container (production mode, same image that is deployed)
+        run: |
+          docker run -d --name api --network host \
+            -e NODE_ENV=production -e PORT=3000 \
+            -e DATABASE_URL=postgresql://ci:ci@localhost:5432/ci \
+            -e REDIS_URL=redis://localhost:6379 \
+            -e JWT_SECRET=ci-only-secret-ci-only-secret-ci-only-1234 \
+            -e BCRYPT_ROUNDS=4 -e RATE_LIMIT_MAX=100000 \
+            -e EMBEDDING_PROVIDER=hash \
+            capstone-api:ci
+
+      - name: Smoke test the running container
+        env:
+          BASE_URL: http://localhost:3000
+          SMOKE_ADMIN_EMAIL: ci-admin@example.com
+          SMOKE_ADMIN_PASSWORD: ci-admin-password-1
+          SMOKE_REQUIRE_SEARCH: 'true'
+        run: npm run smoke
+
+      - name: Container logs
+        if: always()
+        run: docker logs api
+
+  # ------------------------------------------------------------------------------------------------
+  # 3. Staging, then production. Only on a push to main, only if the gates above are green.
+  #    Each environment has its OWN database, Redis, Render service and secrets (GitHub Environments).
+  # ------------------------------------------------------------------------------------------------
+  deploy-staging:
+    name: Deploy to STAGING
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, docker]
+    uses: ./.github/workflows/task-10-deploy.yml
+    with:
+      environment: staging
+    secrets: inherit
+
+  deploy-production:
+    name: Deploy to PRODUCTION
+    needs: deploy-staging # staging must have deployed AND passed its smoke test
+    uses: ./.github/workflows/task-10-deploy.yml
+    with:
+      environment: production # configure "Required reviewers" on this environment for a manual approval gate
+    secrets: inherit

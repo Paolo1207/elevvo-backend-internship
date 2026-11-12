@@ -1,0 +1,95 @@
+name: Task 10 deploy (reusable)
+
+# Called twice by task-10-ci-cd.yml: once for "staging", once for "production".
+# Secrets are read from the GitHub ENVIRONMENT of the same name, so staging and production never share them:
+#   DIRECT_URL                direct (non-pooled) Neon connection string, used ONLY for migrations
+#   RENDER_DEPLOY_HOOK_URL    the service's Deploy Hook from Render
+#   ADMIN_EMAIL, ADMIN_PASSWORD   the first admin account (also used by the post-deploy smoke test)
+# and the variable
+#   APP_URL                   https://<your-service>.onrender.com
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  APP_DIR: industry-level/task-10-production-system
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
+jobs:
+  deploy:
+    name: ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars.APP_URL }}
+    # Two pipelines must never migrate the same database at the same time. Never cancel a migration half way.
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ env.APP_DIR }}/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder # generate never connects
+
+      # --- 1. Database: apply ONLY the pending migrations. `migrate deploy` never resets or drops data. ---
+      - name: Show migration status
+        run: npx prisma migrate status || true
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+      - name: Apply pending migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+      - name: Make sure the admin account exists
+        run: npm run seed:admin
+        env:
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+
+      # --- 2. Application: ask Render to build this commit from the Dockerfile and roll it out. ---
+      - name: Trigger the Render deploy
+        run: |
+          curl --fail --silent --show-error -X POST "${DEPLOY_HOOK}" > /dev/null
+          echo "Deploy requested for ${GITHUB_SHA}"
+        env:
+          DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+      # --- 3. Wait until the NEW version answers (the old one keeps serving until then: zero downtime). ---
+      - name: Wait for this exact commit to be live
+        run: |
+          for attempt in $(seq 1 60); do
+            version=$(curl -fsS --max-time 20 "${APP_URL}/health" 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' || true)
+            echo "attempt ${attempt}: live version = '${version:-none}' (want ${GITHUB_SHA})"
+            if [ "${version}" = "${GITHUB_SHA}" ]; then echo "New version is live."; exit 0; fi
+            sleep 15
+          done
+          echo "The new version did not become live in 15 minutes."; exit 1
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+
+      # --- 4. Prove it works: the real user journey against the deployed URL. ---
+      - name: Smoke test the deployed API
+        run: npm run smoke
+        env:
+          BASE_URL: ${{ vars.APP_URL }}
+          SMOKE_ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          SMOKE_ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          SMOKE_REQUIRE_SEARCH: 'true'
