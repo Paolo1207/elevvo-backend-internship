@@ -1,0 +1,94 @@
+# The whole stack: PostgreSQL + Redis + one-off database migration + the Express API.
+#   (EMBEDDING_PROVIDER=transformers downloads the embedding model, ~120 MB, into the model-cache volume.)
+#   Start:   docker compose up -d --build
+#   Status:  docker compose ps
+#   Stop:    docker compose down          (add -v to also delete the database volume)
+#
+# Start-up order is enforced with health checks:
+#   postgres (healthy) + redis (healthy)  ->  migrate (runs once, exits 0)  ->  api
+name: capstone-stack
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16 # PostgreSQL 16 with the pgvector extension included
+    container_name: capstone-stack-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shopuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shop12345}
+      POSTGRES_DB: ${POSTGRES_DB:-shop}
+    ports:
+      # Host port 5436 (not 5432) so it does not clash with a PostgreSQL installed on your computer.
+      - "5436:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # $$ stops Compose from substituting the variable; the container's shell reads it instead.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: capstone-stack-redis
+    ports:
+      # Host port 6383 so it does not clash with the Redis containers of earlier tasks.
+      - "6383:6379"
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # One-off job: applies the Prisma migrations, then exits. The API waits for it to finish successfully.
+  migrate:
+    build:
+      context: .
+      target: builder # the builder stage still has the Prisma CLI
+    container_name: capstone-stack-migrate
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-shopuser}:${POSTGRES_PASSWORD:-shop12345}@postgres:5432/${POSTGRES_DB:-shop}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      target: runner # the small final image
+    image: capstone-api:1.0.0
+    container_name: capstone-stack-api
+    ports:
+      - "${API_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # Inside the Compose network the containers reach each other by service name.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-shopuser}:${POSTGRES_PASSWORD:-shop12345}@postgres:5432/${POSTGRES_DB:-shop}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-local-compose-secret-change-me-0123456789abcdef}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      # "hash" = light offline stand-in. Use transformers (local model) or openai for real semantic search.
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-hash}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-1000}
+    volumes:
+      - model-cache:/app/.model-cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  model-cache:

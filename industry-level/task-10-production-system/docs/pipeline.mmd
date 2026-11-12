@@ -1,0 +1,23 @@
+flowchart TD
+  pr[Pull request] --> t1
+  push[Push / merge to main] --> t1
+  subgraph ci [CI - every PR and push]
+    t1[Secret scan: no .env committed] --> t2[Type-check + Jest and Supertest<br/>coverage gate]
+    t2 --> t3[prisma migrate deploy<br/>on disposable pgvector Postgres]
+    t3 --> t4[Build production Docker image]
+    t4 --> t5[Run the container + 27-step smoke test]
+  end
+  t5 -->|PR: stop here| done([Review and merge])
+  t5 -->|push to main| s1
+  subgraph stg [STAGING environment - own DB, Redis, secrets]
+    s1[prisma migrate deploy] --> s2[Render deploy hook]
+    s2 --> s3[Wait until /health shows this commit]
+    s3 --> s4[Smoke test the live URL]
+  end
+  s4 --> gate{{Manual approval<br/>GitHub required reviewer}}
+  gate --> p1
+  subgraph prod [PRODUCTION environment - own DB, Redis, secrets]
+    p1[prisma migrate deploy] --> p2[Render deploy hook]
+    p2 --> p3[Wait until /health shows this commit]
+    p3 --> p4[Smoke test the live URL]
+  end
