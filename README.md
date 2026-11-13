@@ -386,3 +386,35 @@ query -> normalize -> Redis result cache -> (miss) Redis embedding cache -> (mis
 | ![Tests](industry-level/task-9-semantic-search/screenshots/07-tests.png) | `npm test` |
 
 More detail: [task README](industry-level/task-9-semantic-search/README.md).
+
+### Task 10: Production-Grade E-Commerce System & Zero-Downtime Cloud Deployment
+
+Folder: [`industry-level/task-10-production-system`](industry-level/task-10-production-system)
+Live: [`https://shop-api-production-a37u.onrender.com/health`](https://shop-api-production-a37u.onrender.com/health)
+
+Capstone that assembles Tasks 3 to 9 into one production API: JWT auth with bcrypt and `ADMIN`/`CUSTOMER` RBAC, Helmet, strict CORS and
+Redis-backed rate limiting; PostgreSQL + Prisma with atomic cart checkout in `$transaction`; Redis cache-aside catalog; semantic vector search (pgvector);
+multi-stage Docker. A GitHub Actions pipeline runs the Supertest suites, applies Prisma migrations to the cloud database, builds the Docker image and deploys
+to **Render + Neon + Upstash**, first to staging and, after approval, to production, with no secret committed (GitHub Environment secrets + Render environment variables).
+Bonus: `GET /health/deep` reports V8 memory, PostgreSQL pool counts and Redis latency.
+
+![Architecture](industry-level/task-10-production-system/docs/architecture.png)
+![Pipeline](industry-level/task-10-production-system/docs/pipeline.png)
+
+| Screenshot | What it shows |
+|---|---|
+| ![Pipeline run](industry-level/task-10-production-system/screenshots/01-actions-pipeline.png) | GitHub Actions: tests, docker, staging, production all green |
+| ![Environments](industry-level/task-10-production-system/screenshots/02-environments-secrets.png) | GitHub environment with secret names only (values hidden) |
+| ![Approval](industry-level/task-10-production-system/screenshots/03-production-approval.png) | The manual approval before production |
+| ![Render](industry-level/task-10-production-system/screenshots/04-render-live.png) | Render services live, deploys succeeded |
+| ![Health](industry-level/task-10-production-system/screenshots/05-health-live.png) | `/health` on the live URL, `version` = the deployed commit |
+| ![Auth](industry-level/task-10-production-system/screenshots/06-auth-rbac.png) | Register, login, then 403 for a customer on admin routes and 401 without a token |
+| ![Checkout](industry-level/task-10-production-system/screenshots/07-cart-checkout.png) | Oversized checkout rolled back (409), real checkout deducts stock and empties the cart |
+| ![Search](industry-level/task-10-production-system/screenshots/08-search-live.png) | Redis cache `MISS` then `HIT`; search degrades to a clean 503 while the OpenAI embeddings account has no credit |
+| ![Deep](industry-level/task-10-production-system/screenshots/09-health-deep.png) | `/health/deep` (admin only): V8 memory, PostgreSQL pool, Redis latency |
+| ![Tests](industry-level/task-10-production-system/screenshots/10-tests.png) | `npm test` |
+
+Note: semantic ranking was verified end to end in Task 9 and in this task's Docker smoke test. In the cloud it calls the OpenAI embeddings API, which needs prepaid credit;
+without it the endpoint answers a clear 503 and the live smoke test treats that one check as optional (`SMOKE_REQUIRE_SEARCH`).
+
+Details: [task README](industry-level/task-10-production-system/README.md) and [deployment guide](industry-level/task-10-production-system/DEPLOYMENT.md).
