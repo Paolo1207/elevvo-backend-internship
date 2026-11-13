@@ -92,4 +92,4 @@ jobs:
           BASE_URL: ${{ vars.APP_URL }}
           SMOKE_ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
           SMOKE_ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-          SMOKE_REQUIRE_SEARCH: 'true'
+          SMOKE_REQUIRE_SEARCH: ${{ vars.SMOKE_REQUIRE_SEARCH || 'true' }}
